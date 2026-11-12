@@ -1,0 +1,13 @@
+{
+  "provider": {
+    "ollama-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama local",
+      "options": { "baseURL": "http://127.0.0.1:11434/v1" },
+      "models": {
+        "qwen3-coder:30b": { "name": "Qwen3 Coder 30B", "limit": { "context": 4096, "output": 1024 }, "tool_call": true }
+      }
+    }
+  },
+  "small_model": "ollama-local/qwen3-coder:30b"
+}

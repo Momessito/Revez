@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Revez — Workspace</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <section class="gate" id="gate" aria-label="Acesso ao Revez">
+    <div class="gate-card">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">↬</span> Revez</div>
+      <h1 id="gateTitle">Workspace</h1>
+      <p id="gateHelp" class="muted" role="status">Carregando…</p>
+      <form id="accountForm" hidden>
+        <label data-for="setup join">Nome<input name="name" maxlength="60" autocomplete="name"></label>
+        <label>E-mail<input name="email" type="email" maxlength="254" autocomplete="username" required></label>
+        <label>Senha<input name="password" type="password" minlength="12" maxlength="128" required></label>
+        <label data-for="setup join"><span id="codeLabel">Código</span><input name="code" maxlength="128" autocomplete="off"></label>
+        <label data-for="setup">Nome do projeto<input name="project" maxlength="80" placeholder="Checkout"></label>
+        <label data-for="setup">Repositório<input name="repository" maxlength="150" placeholder="equipe/checkout"></label>
+        <button class="button primary" id="accountSubmit" type="submit">Entrar</button>
+      </form>
+      <button class="text-button" id="switchGate" type="button" hidden></button>
+    </div>
+  </section>
+  <div class="shell" id="shell" hidden>
+    <header class="top">
+      <button class="icon-button mobile-toggle" id="toggleThreads" aria-label="Conversas" aria-expanded="false">☰</button>
+      <div class="brand"><span class="brand-mark" aria-hidden="true">↬</span> Revez</div>
+      <span class="top-sep"></span><span class="top-project" id="topProject"></span>
+      <span class="spacer"></span>
+      <button class="button quiet mobile-toggle" id="toggleContext" aria-controls="contextPanel" aria-expanded="false">Contexto</button>
+      <span id="identity" class="profile"></span>
+      <button class="button quiet" id="logout" type="button">Sair</button>
+    </header>
+    <aside class="sidebar" aria-label="Projeto">
+      <div class="repo"><div class="repo-icon" aria-hidden="true">⌘</div><div><strong id="project"></strong><div id="repository" class="mono"></div></div></div>
+      <div class="row list-header"><h2 class="eyebrow">Conversas</h2><span class="spacer"></span><button class="icon-button" id="newThread" aria-label="Nova conversa">+</button></div>
+      <nav class="threads" id="threads" aria-label="Conversas do projeto"></nav>
+      <div class="sidebar-bottom">
+        <div id="members" class="members" aria-label="Membros da equipe"></div>
+        <button class="button quiet" id="invite" hidden>＋ Convidar colega</button>
+        <button class="button" id="openChatGPT" hidden>Conectar ChatGPT</button>
+        <button class="button quiet" id="openConnection">◇ Meus computadores</button>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="task-header"><div><div class="eyebrow">Conversa</div><h1 id="taskTitle"></h1></div><span class="pill mono" id="branch"></span></header>
+      <div class="feed" id="feed"><div class="feed-inner" id="messages" aria-label="Histórico da conversa"></div></div>
+      <div class="composer-wrap"><div class="compose-inner">
+        <form id="composer" class="composer">
+          <textarea id="prompt" aria-label="Mensagem" rows="2" maxlength="4000" required></textarea>
+          <div class="composer-actions">
+            <select class="select-inline" id="recipient" aria-label="Destinatário"><option value="team">Equipe</option><option value="chatgpt" id="nativeRecipient" hidden>ChatGPT</option><option value="agent">Meu agente local</option></select>
+            <select class="select-inline" id="deviceSelect" aria-label="Computador da rodada" hidden></select>
+            <select class="select-inline" id="chatgptModel" aria-label="Modelo do ChatGPT" hidden></select>
+            <span id="activeProvider" class="pill" hidden></span><span class="spacer"></span>
+            <button class="button primary send" id="send" type="submit" aria-label="Enviar mensagem">↑</button>
+          </div>
+        </form>
+        <div class="compose-status"><span id="composeStatus" role="status"></span><span class="spacer"></span><span>Ctrl + Enter</span></div>
+      </div></div>
+    </main>
+    <aside class="context" id="contextPanel" aria-label="Contexto compartilhado">
+      <div class="context-head"><h2>Contexto da equipe</h2><button class="button quiet" id="editContext">Atualizar</button></div>
+      <div class="context-body" id="contextBody"></div>
+    </aside>
+  </div>
+  <dialog id="contextDialog" aria-labelledby="contextTitle">
+    <form id="contextForm">
+      <h2 id="contextTitle">Atualizar contexto</h2>
+      <label>Decisão da equipe<textarea name="decision" maxlength="1200" required></textarea></label>
+      <label>Próximo passo<textarea name="next" maxlength="1200" required></textarea></label>
+      <label>Referência Git<input name="ref" maxlength="160" required></label>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="actions"><button class="button quiet" type="button" data-close>Cancelar</button><button class="button primary" type="submit">Publicar versão</button></div>
+    </form>
+  </dialog>
+  <dialog id="threadDialog" aria-labelledby="threadTitle">
+    <form id="threadForm">
+      <h2 id="threadTitle">Nova conversa</h2>
+      <label>Título<input name="title" maxlength="80" required></label>
+      <label>Branch<input name="branch" maxlength="100" value="main" required></label>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="actions"><button class="button quiet" type="button" data-close>Cancelar</button><button class="button primary" type="submit">Criar conversa</button></div>
+    </form>
+  </dialog>
+  <dialog id="codeDialog" aria-labelledby="codeTitle">
+    <form method="dialog">
+      <h2 id="codeTitle"></h2><p id="codeHelp"></p>
+      <label>Código<input id="shareCode" readonly></label>
+      <div class="actions"><button class="button" id="copyCode" type="button">Copiar</button><button class="button primary" type="submit">Fechar</button></div>
+    </form>
+  </dialog>
+  <dialog id="connectionDialog" aria-labelledby="connectionTitle">
+    <form id="connectionForm">
+      <h2 id="connectionTitle">Meus computadores</h2>
+      <p>Escolha um nome e gere um código para conectar o OpenCode no clone do projeto.</p>
+      <div id="deviceList" class="device-list" aria-label="Computadores pareados"></div>
+      <label>Nome do novo computador<input name="name" maxlength="60" placeholder="Ex.: Notebook" required></label>
+      <p class="form-error" id="connectionError" role="alert" hidden></p>
+      <div class="actions"><button class="button quiet" type="button" data-close>Fechar</button><button class="button primary" type="submit">Gerar código</button></div>
+    </form>
+  </dialog>
+  <dialog id="chatgptDialog" aria-labelledby="chatgptTitle">
+    <form method="dialog">
+      <h2 id="chatgptTitle">ChatGPT</h2>
+      <p id="chatgptHelp"></p>
+      <a id="chatgptUsage" class="text-button" href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" hidden>Gerenciar uso no ChatGPT ↗</a>
+      <p id="chatgptError" class="form-error" role="alert" hidden></p>
+      <div class="actions">
+        <button class="button quiet" type="submit">Fechar</button>
+        <button class="button" id="switchChatGPT" type="button" hidden>Usar outra conta</button>
+        <button class="button" id="disconnectChatGPT" type="button" hidden>Desconectar</button>
+        <button class="button primary" id="connectChatGPT" type="button" data-oai-siwc-button>Continuar com ChatGPT</button>
+      </div>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status" hidden></div>
+</body>
+</html>

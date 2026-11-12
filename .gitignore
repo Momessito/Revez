@@ -1,0 +1,6 @@
+.data/
+.vs/
+.env
+.env.*
+node_modules/
+.revez-test-*/
