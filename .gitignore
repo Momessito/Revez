@@ -4,3 +4,8 @@
 .env.*
 node_modules/
 .revez-test-*/
+
+# Frontend development
+storybook-static/
+test-results/
+playwright-report/

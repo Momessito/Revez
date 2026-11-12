@@ -17,6 +17,9 @@ const publicFiles = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
+  ...['inter-latin', 'jetbrains-mono-latin'].map((name) => [`/fonts/${name}.woff2`, [`fonts/${name}.woff2`, 'font/woff2']]),
+  ...['tokens', 'globals', 'workspace'].map((name) => [`/styles/${name}.css`, [`styles/${name}.css`, 'text/css; charset=utf-8']]),
+  ...['components/ui', 'components/workspace', 'lib/api', 'lib/workspace-state'].map((name) => [`/${name}.js`, [`${name}.js`, 'text/javascript; charset=utf-8']]),
 ].map(([path, [file, mime]]) => [path, { data: readFileSync(new URL(`./public/${file}`, import.meta.url)), mime }]));
 
 class HttpError extends Error {
