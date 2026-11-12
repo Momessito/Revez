@@ -9,11 +9,13 @@
   <script src="/app.js" type="module"></script>
 </head>
 <body>
+  <a class="skip-link" href="#prompt">Ir para a mensagem</a>
   <section class="gate" id="gate" aria-label="Acesso ao Revez">
     <div class="gate-card">
       <div class="brand"><span class="brand-mark" aria-hidden="true">↬</span> Revez</div>
       <h1 id="gateTitle">Workspace</h1>
       <p id="gateHelp" class="muted" role="status">Carregando…</p>
+      <button class="button" id="retryGate" type="button" hidden>Tentar novamente</button>
       <form id="accountForm" hidden>
         <label data-for="setup join">Nome<input name="name" maxlength="60" autocomplete="name"></label>
         <label>E-mail<input name="email" type="email" maxlength="254" autocomplete="username" required></label>
@@ -28,28 +30,35 @@
   </section>
   <div class="shell" id="shell" hidden>
     <header class="top">
-      <button class="icon-button mobile-toggle" id="toggleThreads" aria-label="Conversas" aria-expanded="false">☰</button>
+      <button class="icon-button" id="toggleThreads" aria-label="Alternar sidebar" title="Alternar sidebar (Ctrl+B)" aria-controls="projectSidebar" aria-expanded="true">☰</button>
       <div class="brand"><span class="brand-mark" aria-hidden="true">↬</span> Revez</div>
       <span class="top-sep"></span><span class="top-project" id="topProject"></span>
       <span class="spacer"></span>
-      <button class="button quiet mobile-toggle" id="toggleContext" aria-controls="contextPanel" aria-expanded="false">Contexto</button>
+      <button class="button quiet" id="toggleContext" aria-controls="contextPanel" aria-expanded="true">Painel</button>
+      <button class="button quiet command-trigger" id="openCommands" title="Comandos (Ctrl+K)" aria-haspopup="dialog">Comandos <kbd>Ctrl K</kbd></button>
       <span id="identity" class="profile"></span>
       <button class="button quiet" id="logout" type="button">Sair</button>
     </header>
-    <aside class="sidebar" aria-label="Projeto">
+    <div class="error-banner" id="syncError" role="alert" hidden><span id="syncErrorText"></span><button class="button small" id="retrySync">Tentar novamente</button></div>
+    <button class="scrim" id="panelScrim" aria-label="Fechar painel"></button>
+    <aside class="sidebar" id="projectSidebar" aria-label="Projeto">
       <div class="repo"><div class="repo-icon" aria-hidden="true">⌘</div><div><strong id="project"></strong><div id="repository" class="mono"></div></div></div>
+      <nav class="workspace-nav" aria-label="Workspace"><button class="button quiet" id="showOverview">◫ Visão geral</button><button class="button quiet" id="showWorkspace" aria-current="page">↬ Agent Workspace</button></nav>
       <div class="row list-header"><h2 class="eyebrow">Conversas</h2><span class="spacer"></span><button class="icon-button" id="newThread" aria-label="Nova conversa">+</button></div>
+      <label class="session-search"><span class="sr-only">Buscar conversas</span><input id="searchThreads" type="search" placeholder="Buscar conversas…" autocomplete="off"></label>
       <nav class="threads" id="threads" aria-label="Conversas do projeto"></nav>
       <div class="sidebar-bottom">
+        <p class="eyebrow members-label">Membros do workspace</p>
         <div id="members" class="members" aria-label="Membros da equipe"></div>
         <button class="button quiet" id="invite" hidden>＋ Convidar colega</button>
         <button class="button" id="openChatGPT" hidden>Conectar ChatGPT</button>
         <button class="button quiet" id="openConnection">◇ Meus computadores</button>
+        <button class="button quiet" id="openSettings">⚙ Configurações</button>
       </div>
     </aside>
-    <main class="main">
-      <header class="task-header"><div><div class="eyebrow">Conversa</div><h1 id="taskTitle"></h1></div><span class="pill mono" id="branch"></span></header>
-      <div class="feed" id="feed"><div class="feed-inner" id="messages" aria-label="Histórico da conversa"></div></div>
+    <main class="main" id="agentWorkspace">
+      <header class="task-header"><div><div class="eyebrow">Agent Workspace / Conversa</div><h1 id="taskTitle"></h1></div><span class="pill mono" id="branch"></span></header>
+      <div class="feed" id="feed" aria-busy="true"><div class="feed-inner" id="messages" aria-label="Histórico da conversa"><div aria-label="Carregando conversa"><div class="skeleton"></div><div class="skeleton"></div></div></div></div>
       <div class="composer-wrap"><div class="compose-inner">
         <form id="composer" class="composer">
           <textarea id="prompt" aria-label="Mensagem" rows="2" maxlength="4000" required></textarea>
@@ -58,16 +67,20 @@
             <select class="select-inline" id="deviceSelect" aria-label="Computador da rodada" hidden></select>
             <select class="select-inline" id="chatgptModel" aria-label="Modelo do ChatGPT" hidden></select>
             <span id="activeProvider" class="pill" hidden></span><span class="spacer"></span>
-            <button class="button primary send" id="send" type="submit" aria-label="Enviar mensagem">↑</button>
+            <button class="button primary send" id="send" type="submit" aria-label="Enviar mensagem" disabled>↑</button>
           </div>
         </form>
-        <div class="compose-status"><span id="composeStatus" role="status"></span><span class="spacer"></span><span>Ctrl + Enter</span></div>
+        <div class="compose-status"><span id="composeStatus" role="status"></span><button id="retryModels" class="text-button" hidden>Tentar modelos novamente</button><span class="spacer"></span><span><kbd>Ctrl ↵</kbd> enviar</span></div>
       </div></div>
     </main>
+    <main class="overview" id="overview" aria-label="Visão geral do workspace" hidden></main>
+    <div class="panel-resizer" id="panelResizer" role="separator" tabindex="0" aria-label="Largura do painel" aria-orientation="vertical" aria-valuemin="260" aria-valuemax="480" aria-valuenow="312" aria-controls="contextPanel"></div>
     <aside class="context" id="contextPanel" aria-label="Contexto compartilhado">
-      <div class="context-head"><h2>Contexto da equipe</h2><button class="button quiet" id="editContext">Atualizar</button></div>
-      <div class="context-body" id="contextBody"></div>
+      <div class="context-head"><h2>Detalhes da conversa</h2><button class="button quiet" id="editContext">Atualizar</button></div>
+      <div class="tabs" role="tablist" aria-label="Detalhes da conversa"><button id="tabContext" role="tab" aria-selected="true" aria-controls="contextBody" data-panel-tab="context">Contexto</button><button id="tabExecution" role="tab" aria-selected="false" aria-controls="contextBody" tabindex="-1" data-panel-tab="execution">Execução</button><button id="tabActivity" role="tab" aria-selected="false" aria-controls="contextBody" tabindex="-1" data-panel-tab="activity">Atividade</button></div>
+      <div class="context-body" id="contextBody" role="tabpanel" aria-labelledby="tabContext" tabindex="0"></div>
     </aside>
+    <footer class="workspace-status"><span id="syncStatus" role="status"></span><span class="spacer"></span><span class="status-detail">Contexto compartilhado · Execução na sua conta</span></footer>
   </div>
   <dialog id="contextDialog" aria-labelledby="contextTitle">
     <form id="contextForm">
@@ -119,6 +132,16 @@
       </div>
     </form>
   </dialog>
+  <dialog id="commandDialog" class="command-palette" aria-labelledby="commandTitle">
+    <h2 id="commandTitle" class="sr-only">Comandos do workspace</h2>
+    <label><span class="sr-only">Buscar comando ou conversa</span><input id="commandSearch" type="search" placeholder="Buscar comando ou conversa…" autocomplete="off"></label>
+    <div class="command-results" id="commandResults"></div>
+    <div class="command-footer">↑ ↓ navegar · Enter executar · Esc fechar</div>
+  </dialog>
+  <dialog id="settingsDialog" aria-labelledby="settingsTitle"><div class="dialog-content">
+    <h2 id="settingsTitle">Configurações</h2><div id="settingsBody" class="dialog-content"></div>
+    <div class="actions"><button class="button quiet" id="settingsLogout">Sair da conta</button><button class="button primary" type="button" data-close>Fechar</button></div>
+  </div></dialog>
   <div class="toast" id="toast" role="status" hidden></div>
 </body>
 </html>

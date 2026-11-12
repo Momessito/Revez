@@ -1,3 +1,9 @@
+import { api } from './lib/api.js';
+import { element, emptyState, markdown } from './components/ui.js';
+import { createWorkspaceUI } from './components/workspace.js';
+import { createDrafts, filterThreads } from './lib/workspace-state.js';
+const drafts = createDrafts();
+let workspaceUI;
 const $ = (id) => document.getElementById(id);
 let gateMode = 'login';
 let workspace;
@@ -14,23 +20,6 @@ let chatgptModels;
 let catalogLoading;
 let catalogError;
 let askForPlanConsent = false;
-
-async function api(path, body) {
-  const response = await fetch(`/api/${path}`, body === undefined ? {} : {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-  });
-  const data = await response.json();
-  if (!response.ok) throw Object.assign(new Error(data.error || 'O servidor não respondeu.'), { status: response.status });
-  return data;
-}
-
-function element(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
 function toast(text) {
   clearTimeout(toastTimer);
   $('toast').textContent = text;
@@ -75,6 +64,9 @@ function signOutLocally() {
   chatgptModels = undefined;
   catalogError = undefined;
   askForPlanConsent = false;
+  drafts.clear();
+  workspaceUI.reset();
+  for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
   $('prompt').value = '';
   $('recipient').value = 'team';
   $('deviceSelect').value = '';
@@ -84,11 +76,10 @@ function signOutLocally() {
 async function enter() {
   const { setupNeeded, signedIn } = await api('status');
   if (!signedIn) return showGate(setupNeeded ? 'setup' : 'login');
-  await refresh();
-  if (!workspace) return;
   $('gate').hidden = true;
   $('shell').hidden = false;
-  $('feed').scrollTop = $('feed').scrollHeight;
+  await refresh();
+  if (!workspace) return;
   const url = new URL(location.href);
   const result = url.searchParams.get('chatgpt');
   if (result) {
@@ -111,8 +102,10 @@ async function enter() {
   }
   if (!events) {
     events = new EventSource('/api/events');
+    events.addEventListener('open', () => workspaceUI.setConnection('connected'));
     events.addEventListener('change', () => refresh().catch(showError));
-    events.addEventListener('error', () => refresh().catch(showError));
+    events.addEventListener('error', () => workspaceUI.setConnection('reconnecting'));
+    workspaceUI.setConnection('connecting');
   }
 }
 
@@ -124,20 +117,32 @@ function refresh() {
       refreshPending = false;
       const generation = authGeneration;
       const data = await api('state');
-      if (!data.threads.some(({ id }) => id === activeId)) activeId = data.threads[0]?.id;
+      if (generation !== authGeneration) continue;
+      if (!data.threads.some(({ id }) => id === activeId)) {
+        drafts.save(activeId, $('prompt').value);
+        activeId = data.threads[0]?.id;
+        $('prompt').value = drafts.get(activeId);
+      }
       const target = activeId;
-      const conversation = await api(`thread?id=${encodeURIComponent(target)}`);
+      const conversation = target ? await api(`thread?id=${encodeURIComponent(target)}`) : { id: null, title: 'Comece uma conversa', branch: '', messages: [], revisions: [], pending: [] };
       if (activeId !== target || generation !== authGeneration) continue;
       workspace = data;
       thread = conversation;
       render();
+      $('syncError').hidden = true;
+      $('feed').setAttribute('aria-busy', 'false');
     }
   })().finally(() => { refreshing = undefined; });
   return refreshing;
 }
 
 function showError(error) {
-  if (error.status === 401 && workspace) signOutLocally();
+  if (error.status === 401) signOutLocally();
+  if (!$('shell').hidden) {
+    $('syncErrorText').textContent = error.message;
+    $('syncError').hidden = false;
+    $('feed').setAttribute('aria-busy', 'false');
+  }
   toast(error.message);
 }
 
@@ -179,7 +184,9 @@ function message(entry) {
     if (entry.checkout) target.title = `${entry.checkout.branch} @ ${entry.checkout.commit}`;
     meta.append(target);
   }
-  body.append(meta, element('p', entry.kind === 'error' ? 'error-text' : '', entry.text));
+  const content = markdown(entry.text);
+  if (entry.kind === 'error') content.classList.add('error-text');
+  body.append(meta, content);
   const used = isAgent && thread.revisions.find(({ v }) => v === entry.v);
   if (used) {
     const details = element('details');
@@ -191,14 +198,15 @@ function message(entry) {
 }
 
 function renderFeed() {
-  const key = `${thread.id}:${thread.messages.at(-1)?.id}:${JSON.stringify(thread.pending)}`;
+  const key = JSON.stringify([thread.id, thread.messages, thread.pending, thread.revisions]);
   if (key === feedKey) return;
   const feed = $('feed');
-  const scroll = !feedKey?.startsWith(`${thread.id}:`) || feed.scrollHeight - feed.clientHeight - feed.scrollTop < 48;
+  const scroll = $('messages').dataset.thread !== String(thread.id) || feed.scrollHeight - feed.clientHeight - feed.scrollTop < 48;
+  $('messages').dataset.thread = thread.id;
   feedKey = key;
   const children = thread.messages.length
     ? [element('div', 'divider', 'Histórico compartilhado'), ...thread.messages.map(message)]
-    : [element('p', 'muted small', 'Envie uma mensagem para iniciar a conversa.')];
+    : [emptyState('O próximo passo começa aqui.', 'Converse com a equipe ou escolha seu agente para trabalhar com o contexto compartilhado do projeto.')];
   for (const { author, status, device } of thread.pending) {
     const pending = element('div', 'activity pending');
     const label = device ? `${device} · ${shortName(author)}` : `Agente de ${shortName(author)}`;
@@ -209,7 +217,9 @@ function renderFeed() {
   if (scroll) feed.scrollTop = feed.scrollHeight;
 }
 
-function renderContext() {
+function renderContext() { workspaceUI.renderPanel(renderSharedContext); }
+
+function renderSharedContext() {
   const revision = thread.revisions[0];
   const status = element('div', 'state row');
   status.append(element('span', 'dot'), element('span', '', revision ? 'Disponível para os agentes' : 'Publique a primeira versão'), element('span', 'spacer'));
@@ -265,6 +275,7 @@ function renderDeviceSelect() {
 }
 
 function renderComposer() {
+  if (!workspace || !thread) { $('send').disabled = true; return; }
   const recipient = $('recipient').value;
   const agent = recipient === 'agent';
   const native = recipient === 'chatgpt';
@@ -291,7 +302,10 @@ function renderComposer() {
   else if (agent && own.git) status = `${shortCheckout(own.git)} · ${status}`;
   else if (!agent) status = 'Mensagem visível para a equipe';
   $('composeStatus').textContent = status;
-  $('send').disabled = sending || (agent && (!own?.online || own.busy)) || (native && (!connected || !chatgptModels?.length));
+  $('retryModels').hidden = !native || !catalogError;
+  $('send').textContent = sending ? '…' : '↑';
+  $('composer').setAttribute('aria-busy', String(sending));
+  $('send').disabled = sending || !thread?.id || thread.id !== activeId || (agent && (!own?.online || own.busy)) || (native && (!connected || !chatgptModels?.length));
 }
 
 function render() {
@@ -308,14 +322,33 @@ function render() {
   $('nativeRecipient').hidden = !workspace.chatgpt?.available;
   $('openChatGPT').textContent = workspace.chatgpt?.connected ? '● ChatGPT conectado' : 'Conectar ChatGPT';
   if (!workspace.chatgpt?.connected) { chatgptModels = undefined; catalogError = undefined; }
-  $('members').replaceChildren(...workspace.members.map((person) => {
-    const badge = avatar(person.id);
-    badge.title = person.name;
-    badge.removeAttribute('aria-hidden');
-    badge.setAttribute('aria-label', person.name);
-    return badge;
-  }));
-  $('threads').replaceChildren(...workspace.threads.map((row) => {
+  const membersKey = JSON.stringify(workspace.members);
+  if ($('members').dataset.key !== membersKey) {
+    $('members').dataset.key = membersKey;
+    $('members').replaceChildren(...workspace.members.map((person) => {
+      const badge = avatar(person.id);
+      badge.title = person.name;
+      badge.removeAttribute('aria-hidden');
+      badge.setAttribute('role', 'img');
+      badge.setAttribute('aria-label', person.name);
+      return badge;
+    }));
+  }
+  renderThreads();
+  workspaceUI.update();
+  renderFeed();
+  renderComposer();
+  renderContext();
+  if ($('connectionDialog').open) renderDevices();
+  if ($('recipient').value === 'chatgpt') void loadChatGPTModels();
+}
+
+function renderThreads() {
+  const rows = filterThreads(workspace.threads, $('searchThreads').value);
+  const key = JSON.stringify([rows, activeId]);
+  if ($('threads').dataset.key === key) return;
+  $('threads').dataset.key = key;
+  $('threads').replaceChildren(...rows.map((row) => {
     const button = element('button', 'thread');
     button.setAttribute('aria-current', String(row.id === activeId));
     const icon = element('span', 'thread-icon', '▤');
@@ -324,25 +357,25 @@ function render() {
     button.addEventListener('click', () => selectThread(row.id));
     return button;
   }));
-  renderFeed();
-  renderComposer();
-  renderContext();
-  if ($('connectionDialog').open) renderDevices();
-  if ($('recipient').value === 'chatgpt') void loadChatGPTModels();
+  if (!rows.length) $('threads').append(element('p', 'small muted', 'Nenhuma conversa encontrada.'));
 }
 
-function togglePanel(name, value) {
-  const visible = value ?? !$('shell').classList.contains(`show-${name}`);
-  $('shell').classList.toggle(`show-${name}`, visible);
-  $(name === 'threads' ? 'toggleThreads' : 'toggleContext').setAttribute('aria-expanded', String(visible));
-  if (visible) togglePanel(name === 'threads' ? 'context' : 'threads', false);
-}
+function togglePanel(name, value) { workspaceUI.togglePanel(name, value); }
 
-function selectThread(id) {
-  if (activeId !== id) $('prompt').value = '';
-  activeId = id;
+async function selectThread(id) {
+  if (activeId !== id) {
+    drafts.save(activeId, $('prompt').value);
+    activeId = id;
+    $('prompt').value = drafts.get(id);
+    $('taskTitle').textContent = 'Carregando conversa…';
+    $('feed').setAttribute('aria-busy', 'true');
+    $('messages').replaceChildren(element('div', 'skeleton'));
+    feedKey = undefined;
+    renderComposer();
+  }
   sessionStorage.setItem('revez.thread', id);
-  togglePanel('threads', false);
+  workspaceUI.setView('workspace');
+  workspaceUI.closeOverlays();
   return refresh().catch(showError);
 }
 
@@ -401,6 +434,7 @@ $('newThread').addEventListener('click', () => {
   $('threadDialog').showModal();
 });
 $('editContext').addEventListener('click', () => {
+  if (!thread?.id) return;
   const form = $('contextForm');
   const latest = thread.revisions[0];
   form.dataset.thread = thread.id;
@@ -430,6 +464,7 @@ async function issueCode(button, path, title, help) {
 
 $('invite').addEventListener('click', () => issueCode($('invite'), 'invites', 'Convidar colega', 'Compartilhe o endereço do workspace e este código. Ele expira em uma hora e vale para uma conta.'));
 function renderDevices() {
+  if (!workspace) return;
   const list = $('deviceList');
   const key = JSON.stringify(workspace.devices);
   if (list.dataset.key === key) return;
@@ -454,6 +489,7 @@ function renderDevices() {
   }) : [element('p', 'muted', 'Nenhum computador pareado ainda.')]));
 }
 $('openConnection').addEventListener('click', () => {
+  if (!workspace) return;
   $('connectionError').hidden = true;
   renderDevices();
   $('connectionDialog').showModal();
@@ -512,6 +548,7 @@ async function connectChatGPT(button, fresh = false) {
 }
 
 $('chatgptModel').addEventListener('change', () => sessionStorage.setItem('revez.chatgptModel', $('chatgptModel').value));
+$('retryModels').addEventListener('click', () => loadChatGPTModels(true));
 $('openChatGPT').addEventListener('click', () => openChatGPTDialog());
 $('connectChatGPT').addEventListener('click', () => connectChatGPT($('connectChatGPT')));
 $('switchChatGPT').addEventListener('click', () => connectChatGPT($('switchChatGPT'), true));
@@ -544,7 +581,8 @@ $('composer').addEventListener('submit', async (event) => {
   try {
     await api('messages', { text, threadId, audience, model: $('chatgptModel').value,
       ...(device && { deviceId: device.id, checkout: device.git, deviceModel: device.model }) });
-    if (thread.id === threadId && $('prompt').value === text) $('prompt').value = '';
+    if (activeId === threadId && $('prompt').value === text) { $('prompt').value = ''; drafts.save(threadId, ''); }
+    else if (drafts.get(threadId) === text) drafts.save(threadId, '');
     await refresh();
   } catch (error) { showError(error); if (error.status === 409) void refresh().catch(showError); }
   finally { sending = false; if (workspace) renderComposer(); }
@@ -552,5 +590,20 @@ $('composer').addEventListener('submit', async (event) => {
 $('prompt').addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); $('composer').requestSubmit(); }
 });
+workspaceUI = createWorkspaceUI({ getState: () => ({ workspace, thread }), selectThread, refresh: () => refresh().catch(showError), renderContext });
+$('searchThreads').addEventListener('input', () => { if (workspace) renderThreads(); });
+$('prompt').addEventListener('input', () => drafts.save(activeId, $('prompt').value));
+$('retrySync').addEventListener('click', () => enter().catch(showError));
+async function boot() {
+  $('retryGate').hidden = true;
+  try { await enter(); }
+  catch (error) {
+    if (!$('shell').hidden) showError(error);
+    else { $('gateHelp').textContent = error.message; $('gateHelp').classList.add('error-text'); $('retryGate').hidden = false; }
+  }
+}
+$('retryGate').addEventListener('click', boot);
 setInterval(() => { if (workspace) refresh().catch(showError); }, 8000);
-enter().catch((error) => { $('gateHelp').textContent = error.message; $('gateHelp').classList.add('error-text'); });
+window.addEventListener('pagehide', () => { events?.close(); events = undefined; });
+window.addEventListener('pageshow', (event) => { if (event.persisted && workspace) enter().catch(showError); });
+boot();

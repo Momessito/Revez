@@ -1,0 +1,68 @@
+@font-face {
+  font-family: Inter;
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+}
+:root {
+  color-scheme: dark;
+  --mint-100: #def7e7;
+  --mint-300: #a3e7bd;
+  --mint-500: #6abb8c;
+  --forest-950: #111a16;
+  --forest-900: #17221c;
+  --forest-800: #1c2922;
+  --forest-700: #233b30;
+  --forest-600: #26372d;
+  --forest-500: #364d40;
+  --bg: var(--forest-950);
+  --side: var(--forest-900);
+  --surface: var(--forest-800);
+  --elevated: var(--forest-600);
+  --line: var(--forest-500);
+  --text: #f1f6f2;
+  --muted: #a9b6ae;
+  --sub: #97a99e;
+  --green: var(--mint-300);
+  --green-bg: var(--forest-700);
+  --focus: var(--mint-300);
+  --hover: var(--forest-600);
+  --selected: var(--forest-700);
+  --disabled: #819289;
+  --success: #a3e7bd;
+  --error: #ffb4aa;
+  --error-bg: #3b2524;
+  --warning: #f2d08b;
+  --warning-bg: #3b3424;
+  --info: #a9cdf4;
+  --info-bg: #233343;
+  --font-ui: Inter, Geist, 'Segoe UI', sans-serif;
+  --font-code: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --sidebar-width: 248px;
+  --panel-width: 312px;
+  --header-height: 56px;
+  --motion: 120ms;
+  --shadow: 0 16px 48px #0005;
+  font-family: var(--font-ui);
+  font-synthesis: none;
+  color: var(--text);
+  background: var(--bg);
+}

@@ -53,3 +53,28 @@ A chave ou sessão do provedor fica na instalação local. Pedidos e respostas e
 Para testar dois destinos na mesma conta, abra dois terminais, use um código diferente em cada um e aponte os runners para clones distintos. Escolha os destinos na conversa. O runner verifica a branch e o commit antes e depois da execução. Se a revisão mudar, confira o destino e envie novamente. Essa verificação acompanha o `HEAD`; alterações locais sem commit continuam no clone. Esta etapa cobre leitura e planejamento. Alterações de código, troca de branch, PRs e sincronização de arquivos continuam no Git.
 
 `npm test` verifica colaboração entre contas, dois destinos simulados na mesma conta, revogação, mudança de revisão, migração do banco e login nativo do ChatGPT com um provedor simulado. Para testar com sua conta real, autorize o Revez pelo botão e faça uma rodada no chat.
+
+## Desenvolver o frontend
+
+A aplicação continua usando HTML, CSS e JavaScript nativos, sem build obrigatório para iniciar o servidor. O novo workspace inclui visão geral, busca de conversas, paleta de comandos, rascunhos por conversa e painéis de contexto, execução e atividade. Inter e JetBrains Mono são servidas localmente.
+
+- `Ctrl/Cmd+K`: comandos e busca de conversas.
+- `Ctrl/Cmd+B`: recolher/abrir sidebar.
+- `Ctrl/Cmd+Shift+O`: nova conversa.
+- `Ctrl/Cmd+Enter`: enviar mensagem.
+- A divisória do painel aceita arrastar, setas, Home e End; Escape fecha painéis sobrepostos no mobile.
+
+Para o ambiente de desenvolvimento, execute `npm ci`. Use `npm run storybook` para explorar os componentes ou `npm run build:storybook` para gerar o catálogo. Leia a [auditoria, os tokens, os fluxos e os contratos de evolução](docs/frontend.md).
+
+### Testes sem banco
+
+```sh
+npm run test:frontend
+npx playwright install chromium
+npm run test:ui
+npm run build:storybook
+```
+
+Os testes de interface usam um servidor estático independente e simulam todas as APIs no navegador; não iniciam `server.mjs`, não abrem SQLite e não chamam provedores. O CI de frontend executa somente esses testes. Já `npm test` inclui a suíte original de integração e **grava em SQLite**, inclusive criando bancos temporários e exercitando migrações: não execute esse comando quando o acesso a bancos deve ser somente leitura.
+
+O SSE atual sinaliza mudanças e reconecta automaticamente; o frontend também atualiza os dados periodicamente. Streaming por token, presença online de membros, diffs, ferramentas, cancelamento e múltiplos projetos dependem de novos contratos e não são simulados na aplicação.
